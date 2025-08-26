@@ -786,6 +786,32 @@ def main():
                     # Display results
                     st.success("✅ Conversion completed successfully!")
                     
+                    # Add product flagging analysis
+                    product_variant_refs = set(product_variants['Internal Reference'].astype(str).unique())
+                    purchase_order_refs = set(purchase_orders['Internal Reference'].astype(str).unique())
+                    
+                    not_found_refs = purchase_order_refs - product_variant_refs
+                    found_refs = purchase_order_refs & product_variant_refs
+                    
+                    if not_found_refs:
+                        st.warning(f"⚠️ Found {len(not_found_refs)} products from Purchase Orders that are NOT in Product Variants")
+                        
+                        # Show detailed breakdown
+                        not_found_items = purchase_orders[purchase_orders['Internal Reference'].astype(str).isin(not_found_refs)]
+                        not_found_summary = not_found_items.groupby('Internal Reference').agg({
+                            'Store Name': 'first',
+                            '# of Order': 'sum',
+                            'Price': 'sum'
+                        }).reset_index()
+                        not_found_summary.columns = ['Internal Reference', 'Store Name (Example)', 'Total Quantity', 'Total Value']
+                        
+                        with st.expander(f"🚨 Products NOT Found in Variants ({len(not_found_refs)} items)", expanded=False):
+                            st.dataframe(not_found_summary, use_container_width=True)
+                            st.info("💡 These items will appear with 'NOT FOUND' flag in the 'Original Purchase Orders' sheet of the download file")
+                    
+                    if found_refs:
+                        st.success(f"✅ {len(found_refs)} products from Purchase Orders were found in Product Variants")
+                    
                     # Show order summaries
                     if order_summaries is not None and not order_summaries.empty:
                         with st.expander("📋 Order Summaries", expanded=True):
@@ -820,8 +846,19 @@ def main():
                                 # Save order line details
                                 order_line_details.to_excel(writer, sheet_name='Order Line Details', index=False)
                                 
-                                # Save original data for reference
-                                purchase_orders.to_excel(writer, sheet_name='Original Purchase Orders', index=False)
+                                # Add flagging for products not found in Product Variants
+                                flagged_purchase_orders = purchase_orders.copy()
+                                
+                                # Get all Internal References from Product Variants
+                                product_variant_refs = set(product_variants['Internal Reference'].astype(str).unique())
+                                purchase_order_refs = set(purchase_orders['Internal Reference'].astype(str).unique())
+                                
+                                # Flag products not found in Product Variants
+                                flagged_purchase_orders['Product Found in Variants'] = flagged_purchase_orders['Internal Reference'].astype(str).isin(product_variant_refs)
+                                flagged_purchase_orders['Flag'] = flagged_purchase_orders['Product Found in Variants'].apply(lambda x: 'Found' if x else 'NOT FOUND')
+                                
+                                # Save flagged original data for reference
+                                flagged_purchase_orders.to_excel(writer, sheet_name='Original Purchase Orders', index=False)
                                 product_variants.to_excel(writer, sheet_name='Product Variants', index=False)
                                 store_names.to_excel(writer, sheet_name='Store Names', index=False)
                             
@@ -845,7 +882,7 @@ def main():
                         st.markdown("""
                         - **Order Summaries**: Summary of orders by store
                         - **Order Line Details**: Detailed product lines for Odoo import
-                        - **Original Purchase Orders**: Raw extracted data
+                        - **Original Purchase Orders**: Raw extracted data with product variant flags ('Found' or 'NOT FOUND')
                         - **Product Variants**: Reference product data
                         - **Store Names**: Reference store data
                         """)
