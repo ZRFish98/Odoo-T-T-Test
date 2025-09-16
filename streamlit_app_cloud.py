@@ -520,6 +520,7 @@ class OdooConverter:
                 'Total Units': row['Total Units'],
                 'Unit Price': row['Unit Price'],
                 'Total Price': row['Total Price'],
+                'Lock Unit Price': True,
                 'PO No.': row['PO No.'],
                 'Order Date': row['Order Date'],
                 'Delivery Date': row['Delivery Date']
